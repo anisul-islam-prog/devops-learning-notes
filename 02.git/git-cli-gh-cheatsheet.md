@@ -4,7 +4,7 @@
 
 | Command | Example with Output | When to Use | Why |
 |---------|---------------------|-------------|-----|
-| `gh auth login` | `$ gh auth login`<br>`? What account do you want to log into? GitHub.com`<br>`? What is your preferred protocol for Git operations? HTTPS`<br>`? Authenticate Git with your GitHub credentials? Yes`<br>`✓ Logged in as username` | First-time setup or adding new account | Authenticates CLI with GitHub; enables all other `gh` commands |
+| `gh auth login` | `$ gh auth login`<br>` What account do you want to log into? GitHub.com`<br>` What is your preferred protocol for Git operations? HTTPS`<br>` Authenticate Git with your GitHub credentials? Yes`<br>`✓ Logged in as username` | First-time setup or adding new account | Authenticates CLI with GitHub; enables all other `gh` commands |
 | `gh auth logout` | `$ gh auth logout --hostname github.com`<br>`✓ Logged out of github.com account 'username'` | Remove account credentials | Security cleanup when leaving shared machine |
 | `gh auth status` | `$ gh auth status`<br>`github.com`<br>`  ✓ Logged in to github.com as username (keyring)`<br>`  ✓ Git operations for github.com configured to use https protocol.` | Verify authentication state | Troubleshoot permission errors; confirm active account |
 | `gh auth switch` | `$ gh auth switch --user work-account`<br>`✓ Switched active account for github.com to work-account` | Toggle between multiple accounts | Manage personal vs. work GitHub accounts seamlessly |
