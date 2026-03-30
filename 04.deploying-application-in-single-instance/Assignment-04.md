@@ -345,11 +345,11 @@ sudo ufw status
 #### Step 14: Secure PostgreSQL
 ```bash
 # Ensure PostgreSQL only listens on localhost
-sudo nano /etc/postgresql/14/main/postgresql.conf
+sudo nano /etc/postgresql/16/main/postgresql.conf
 # listen_addresses = 'localhost'
 
 # Restrict pg_hba.conf to local connections only
-sudo nano /etc/postgresql/14/main/pg_hba.conf
+sudo nano /etc/postgresql/16/main/pg_hba.conf
 # Ensure these lines exist:
 local   all             postgres                                peer
 host    all             all             127.0.0.1/32            scram-sha-256
@@ -383,3 +383,6 @@ df -h
 # Check memory usage
 free -h
 ```
+
+UFW Status:
+![ufw_status](image-5.png)
