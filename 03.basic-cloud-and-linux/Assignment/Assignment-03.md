@@ -146,7 +146,7 @@ sudo systemctl status gunicorn
 - Confirm that the application loads correctly in the browser.
 - Take a screenshot showing the Django app running via the EC2 public IP.
 
-![deployed](images.png)
+![deployed](t1_final.png)
 
 
 ### Step 9 (Optional): Configure NGINX as a Reverse Proxy
