@@ -1,0 +1,25 @@
+Test Execution Report
+=====================
+Date: Sat Apr  4 09:54:06 UTC 2026
+Node Version: v22.22.2
+NPM Version: 10.9.7
+
+--- Application Check Output ---
+
+> node-express-app@1.0.0 check
+> mocha test/**/*.test.js
+
+
+
+  Server Tests
+    GET /
+      ✔ should return HTML file
+    GET /api
+      ✔ should return Hello World message
+
+
+  2 passing (34ms)
+
+
+--- Test Status ---
+Tests completed successfully
