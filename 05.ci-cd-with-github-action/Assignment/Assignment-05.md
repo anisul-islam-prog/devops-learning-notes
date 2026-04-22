@@ -1,4 +1,4 @@
-# Module 5 Assignment
+# Module-05 Assignment
 > Objective: To implement a CI/CD pipeline using GitHub Actions, including testing, artifact management, and deployment to a self-hosted runner.
 > 
 **Application**: https://github.com/roy35-909/OSTAD-Assignment-module-3

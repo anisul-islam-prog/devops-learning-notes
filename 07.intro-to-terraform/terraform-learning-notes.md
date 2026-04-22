@@ -322,3 +322,604 @@ resource "aws_db_instance" "prod" {
 ## Final Word
 
 Terraform is the **lingua franca** of modern infrastructure. For the solo architect, it transforms overwhelming cloud complexity into version-controlled, reviewable, and repeatable code. But respect the state file—it is both your greatest asset and your greatest liability. Master remote backends, enforce locking, pin your providers, and treat your HCL with the same rigor as your application code. The alternative is 3 AM emergency console sessions that no amount of coffee can fix.
+
+
+# Terraform AWS Deployment Blueprint
+
+## 1. The Infrastructure Code (Gold Standard)
+
+This modular Terraform configuration deploys a secure, production-ready web application stack. It follows AWS Well-Architected principles: least privilege IAM, defense-in-depth security groups, and immutable infrastructure patterns.
+
+**File: `main.tf`**
+```hcl
+# ============================================================
+# PROVIDER & BACKEND
+# ============================================================
+# Pin provider version for reproducibility; use S3 backend for 
+# team collaboration and state locking (critical for production)
+terraform {
+  required_version = ">= 1.5.0"
+  
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"  # Lock to major version to prevent breaking changes
+    }
+  }
+  
+  # Uncomment for production: S3 backend with DynamoDB state locking
+  # backend "s3" {
+  #   bucket         = "my-terraform-state-bucket"
+  #   key            = "webapp/terraform.tfstate"
+  #   region         = "us-east-1"
+  #   encrypt        = true
+  #   dynamodb_table = "terraform-locks"
+  # }
+}
+
+provider "aws" {
+  region = var.aws_region
+  
+  default_tags {
+    tags = {
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      Project     = "webapp-deployment"
+    }
+  }
+}
+
+# ============================================================
+# DATA SOURCES
+# ============================================================
+# Fetch latest Amazon Linux 2023 AMI with ARM64 (Graviton) for 
+# cost/performance efficiency. Filter ensures we get the official image.
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-arm64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+# ============================================================
+# NETWORKING
+# ============================================================
+# Dedicated VPC with DNS hostnames enabled for internal service discovery
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "${var.project_name}-vpc"
+  }
+}
+
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+}
+
+# Public subnet for the bastion/app server (simplified single-AZ for learning)
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block                = "10.0.1.0/24"
+  availability_zone         = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch   = true  # Required for direct internet access without EIP
+
+  tags = {
+    Name = "${var.project_name}-public-subnet"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# ============================================================
+# SECURITY GROUPS (Defense in Depth)
+# ============================================================
+# SG-1: Bastion/Jump Host access - ONLY port 22 from specific CIDR
+# WHY: Restricting SSH to office IP prevents brute force attacks
+resource "aws_security_group" "bastion" {
+  name_prefix = "${var.project_name}-bastion-"
+  vpc_id      = aws_vpc.main.id
+  description = "Bastion host security group"
+
+  ingress {
+    description = "SSH from trusted IP only"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.trusted_ip]  # NEVER use 0.0.0.0/0 for SSH
+  }
+
+  egress {
+    description = "Allow all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-bastion-sg"
+  }
+}
+
+# SG-2: Application Tier - HTTP/HTTPS from internet, SSH only from bastion
+# WHY: Layered security; app server not directly exposed to SSH from internet
+resource "aws_security_group" "app" {
+  name_prefix = "${var.project_name}-app-"
+  vpc_id      = aws_vpc.main.id
+  description = "Application server security group"
+
+  ingress {
+    description = "HTTP from internet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS from internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description     = "SSH from bastion only"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.bastion.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-app-sg"
+  }
+}
+
+# ============================================================
+# IAM (Least Privilege)
+# ============================================================
+# WHY: Instance role prevents hardcoded credentials; SSM policy enables 
+# Session Manager (browser-based SSH) as secure alternative to port 22
+resource "aws_iam_role" "app_role" {
+  name = "${var.project_name}-app-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm" {
+  role       = aws_iam_role.app_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "app" {
+  name = "${var.project_name}-app-profile"
+  role = aws_iam_role.app_role.name
+}
+
+# ============================================================
+# COMPUTE (Immutable Infrastructure)
+# ============================================================
+# WHY: user_data script bootstraps on launch; no manual SSH config needed
+# T3/T4g instances provide burstable performance for dev/test workloads
+resource "aws_instance" "app" {
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.app.id]
+  iam_instance_profile   = aws_iam_instance_profile.app.name
+
+  # Root volume encrypted by default (compliance requirement)
+  root_block_device {
+    volume_size           = 20
+    volume_type           = "gp3"  # Better IOPS than gp2, lower cost
+    encrypted             = true
+    delete_on_termination = true   # Cleanup with instance
+  }
+
+  # Bootstrap script: installs Docker and deploys nginx container
+  user_data = base64encode(templatefile("${path.module}/bootstrap.sh", {
+    app_version = var.app_version
+  }))
+
+  user_data_replace_on_change = true  # Trigger replacement if script changes
+
+  tags = {
+    Name = "${var.project_name}-app-server"
+  }
+}
+
+# Elastic IP for stable DNS (optional, costs $0.005/hr when unattached)
+resource "aws_eip" "app" {
+  instance = aws_instance.app.id
+  domain   = "vpc"
+
+  tags = {
+    Name = "${var.project_name}-eip"
+  }
+}
+
+# ============================================================
+# OUTPUTS
+# ============================================================
+output "app_public_ip" {
+  description = "Public IP of the application server"
+  value       = aws_eip.app.public_ip
+}
+
+output "ssh_command" {
+  description = "SSH command to connect to instance"
+  value       = "ssh -i ~/.ssh/${var.key_name}.pem ec2-user@${aws_eip.app.public_ip}"
+}
+
+output "app_url" {
+  description = "Application URL"
+  value       = "http://${aws_eip.app.public_ip}"
+}
+```
+
+**File: `variables.tf`**
+```hcl
+variable "aws_region" {
+  description = "AWS region for deployment"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "environment" {
+  description = "Environment tag (dev/staging/prod)"
+  type        = string
+  default     = "dev"
+}
+
+variable "project_name" {
+  description = "Project identifier for resource naming"
+  type        = string
+  default     = "tf-webapp"
+}
+
+variable "instance_type" {
+  description = "EC2 instance type (t4g.micro for free tier ARM)"
+  type        = string
+  default     = "t4g.micro"  # ARM64: 2 vCPU, 1GB RAM, free tier eligible
+}
+
+variable "key_name" {
+  description = "Name of existing EC2 Key Pair for SSH"
+  type        = string
+}
+
+variable "trusted_ip" {
+  description = "CIDR block for SSH access (your public IP/32)"
+  type        = string
+}
+
+variable "app_version" {
+  description = "Application version tag for Docker image"
+  type        = string
+  default     = "latest"
+}
+```
+
+**File: `bootstrap.sh`**
+```bash
+#!/bin/bash
+set -euo pipefail  # Exit on error, undefined vars, pipe failures
+
+# Update system and install Docker
+dnf update -y
+dnf install -y docker amazon-cloudwatch-agent
+
+# Start and enable Docker
+systemctl start docker
+systemctl enable docker
+usermod -aG docker ec2-user
+
+# Run nginx container with health check
+docker run -d \
+  --name webapp \
+  --restart unless-stopped \
+  -p 80:80 \
+  -p 443:443 \
+  -e APP_VERSION="${app_version}" \
+  nginx:alpine
+
+# Configure CloudWatch log agent for centralized logging
+cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'EOF'
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/docker",
+            "log_group_name": "/aws/ec2/webapp",
+            "log_stream_name": "{instance_id}/docker"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+
+systemctl enable amazon-cloudwatch-agent
+systemctl start amazon-cloudwatch-agent
+
+# Signal success to CloudFormation/Systems Manager (optional)
+echo "Bootstrap completed at $(date)" >> /var/log/bootstrap.log
+```
+
+---
+
+## 2. Environment Prep
+
+### Prerequisites Installation
+
+```bash
+# 1. Terraform (Infrastructure as Code)
+brew install terraform                    # macOS
+# OR
+sudo apt-get update && sudo apt-get install -y terraform  # Ubuntu/Debian
+
+# 2. AWS CLI v2 (API interaction)
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
+# 3. SSH Key Pair generation (if none exists)
+ssh-keygen -t ed25519 -C "tf-deploy-$(date +%Y%m%d)" -f ~/.ssh/tf-deploy
+chmod 400 ~/.ssh/tf-deploy
+```
+
+### Authentication Setup
+
+```bash
+# Method A: AWS SSO (Enterprise standard)
+aws configure sso
+aws sso login --profile dev-admin
+
+# Method B: Access Keys (Development only)
+aws configure
+# Enter: AWS Access Key ID, Secret Key, region (us-east-1), output (json)
+
+# Verify credentials
+aws sts get-caller-identity
+
+# Upload public key to AWS (required for SSH access)
+aws ec2 import-key-pair \
+  --key-name tf-deploy \
+  --public-key-material fileb://~/.ssh/tf-deploy.pub
+```
+
+---
+
+## 3. The Deployment Workflow
+
+### Pre-Flight Check (Validate Before You Fly)
+
+```bash
+# Step 0: Format and validate syntax
+terraform fmt -recursive                    # Canonical formatting
+terraform init                              # Initialize providers/modules
+terraform validate                          # Syntax validation
+
+# Step 1: Security scan (optional but recommended)
+terraform plan -out=tfplan
+terraform show -json tfplan | jq '.planned_values' > plan.json
+
+# Step 2: Cost estimation (install infracost: https://www.infracost.io)
+infracost breakdown --path . --terraform-plan-flags "-var-file=dev.tfvars"
+
+# Step 3: Apply with auto-approval (only after validation passes)
+terraform apply -auto-approve tfplan
+```
+
+### Complete Command Sequence
+
+```bash
+# 1. Initialize (one-time per environment)
+terraform init -backend-config="bucket=my-tf-state" -backend-config="key=webapp/dev"
+
+# 2. Plan with variables
+terraform plan \
+  -var="key_name=tf-deploy" \
+  -var="trusted_ip=$(curl -s ifconfig.me)/32" \
+  -var="app_version=v1.2.0" \
+  -out=tfplan
+
+# 3. Apply
+terraform apply tfplan
+
+# 4. Verify outputs
+terraform output
+```
+
+---
+
+## 4. Live Verification
+
+### SSH Access
+
+```bash
+# Method 1: Direct SSH (if port 22 open in SG)
+ssh -i ~/.ssh/tf-deploy.pem ec2-user@$(terraform output -raw app_public_ip)
+
+# Method 2: AWS Session Manager (no open ports, audit trail)
+aws ssm start-session \
+  --target $(terraform output -raw app_instance_id) \
+  --document-name AWS-StartInteractiveCommand \
+  --parameters command="bash -l"
+```
+
+### The 3-Command Verification Checklist
+
+```bash
+# CHECK 1: Service Health (nginx container running?)
+sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep webapp
+# Expected: webapp   Up 2 minutes   0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp
+
+# CHECK 2: Port Binding (locally and externally)
+sudo ss -tlnp | grep -E '(:80|:443)'      # Local port binding
+curl -s -o /dev/null -w "%{http_code}" http://localhost:80  # HTTP 200 expected
+
+# CHECK 3: Log Health (no errors in bootstrap or application)
+sudo journalctl -u docker --since "10 minutes ago" --no-pager | tail -20
+sudo cat /var/log/bootstrap.log | grep -E "(error|failed|completed)" | tail -5
+```
+
+---
+
+## 5. Force-Multiplier Efficiency Hack
+
+**The `Makefile` Autopilot**: One command to rule them all. Creates a 5-minute deployment loop.
+
+**File: `Makefile`**
+```makefile
+.PHONY: init plan apply destroy verify ssh clean
+
+# Auto-detect public IP for security group
+PUBLIC_IP := $(shell curl -s ifconfig.me)/32
+
+init:
+	terraform init
+	terraform workspace new dev 2>/dev/null || terraform workspace select dev
+
+plan:
+	terraform plan -var="trusted_ip=$(PUBLIC_IP)" -out=tfplan
+
+apply:
+	terraform apply tfplan
+	@echo "Deployment complete. URL: http://$(shell terraform output -raw app_public_ip)"
+
+verify:
+	@echo "=== SERVICE STATUS ==="
+	@ssh -i ~/.ssh/tf-deploy.pem -o StrictHostKeyChecking=no ec2-user@$(shell terraform output -raw app_public_ip) 'sudo docker ps | grep webapp'
+	@echo "=== PORT CHECK ==="
+	@ssh -i ~/.ssh/tf-deploy.pem -o StrictHostKeyChecking=no ec2-user@$(shell terraform output -raw app_public_ip) 'curl -s -o /dev/null -w "%{http_code}" http://localhost:80'
+	@echo "=== LOGS ==="
+	@ssh -i ~/.ssh/tf-deploy.pem -o StrictHostKeyChecking=no ec2-user@$(shell terraform output -raw app_public_ip) 'sudo tail -5 /var/log/bootstrap.log'
+
+destroy:
+	terraform destroy -var="trusted_ip=$(PUBLIC_IP)" -auto-approve
+
+ssh:
+	ssh -i ~/.ssh/tf-deploy.pem ec2-user@$(shell terraform output -raw app_public_ip)
+```
+
+**Usage:**
+```bash
+make init && make plan && make apply  # Deploy in 3 commands
+make verify                           # Health check
+make destroy                          # Cleanup
+```
+
+---
+
+## 6. Cost-Ops Cleanup
+
+### Zero-Waste Teardown
+
+```bash
+# Standard destroy (removes all managed resources)
+terraform destroy -auto-approve
+
+# Nuclear option (if state is corrupted or resources drifted)
+terraform state list | xargs -I {} terraform state rm {}  # Clear state
+# Then manually purge via AWS CLI:
+aws ec2 describe-instances --filters "Name=tag:Project,Values=webapp-deployment" --query 'Reservations[].Instances[].InstanceId' --output text | xargs aws ec2 terminate-instances --instance-ids
+
+# Verify zero resources remain
+aws ec2 describe-instances --filters "Name=tag:Project,Values=webapp-deployment" --query 'length(Reservations[])'
+# Expected output: 0
+```
+
+### Cost Prevention Guardrails
+
+```bash
+# Set AWS Budget Alert (run once per account)
+aws budgets create-budget \
+  --account-id $(aws sts get-caller-identity --query Account --output text) \
+  --budget file://budget.json \
+  --notifications-with-subscribers file://notifications.json
+
+# budget.json: Alert at $5 actual, $1 forecasted
+```
+
+---
+
+## Architecture Summary
+
+```
+┌─────────────────┐
+│   Internet      │
+└────────┬────────┘
+         │
+┌────────▼────────┐     ┌─────────────────┐
+│  ALB (optional) │────▶│  EC2 (t4g.micro)│
+│   :80 / :443    │     │  Docker/Nginx   │
+└─────────────────┘     │  EBS encrypted  │
+                        │  CloudWatch logs│
+                        └─────────────────┘
+                               │
+                        ┌──────▼──────┐
+                        │  IAM Role   │
+                        │  (SSM, CW)  │
+                        └─────────────┘
+```
+
+**Key Security Decisions:**
+- **No 0.0.0.0/0 on SSH**: Restricted to single IP prevents brute force
+- **IAM over access keys**: Rotating credentials eliminated
+- **EBS encryption**: Data at rest compliance by default
+- **Session Manager**: Audit trail without bastion host costs
+
+**Estimated Cost**: ~$8.50/month (t4g.micro on-demand) or $0 under AWS Free Tier (750 hours/month for 12 months).
+
+Execute `terraform init` and begin.
