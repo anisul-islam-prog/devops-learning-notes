@@ -1,5 +1,5 @@
-anisul-islam-fahd.pem
-anisul-islam-fahd.pub
+*.pem
+*.pub
 
 # Local .terraform directories
 .terraform/
