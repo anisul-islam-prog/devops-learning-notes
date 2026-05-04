@@ -1,0 +1,77 @@
+# ==========================================
+# IAM — Using Existing Roles (Read-Only)
+# ==========================================
+
+# If you have an existing instance profile, use data source
+data "aws_iam_instance_profile" "existing" {
+  name = "your-existing-instance-profile"  # Ask your admin for this
+}
+
+# For the assignment, if no existing profile is available,
+# document that IAM restrictions prevent creation and show
+# what WOULD be created:
+
+/*
+resource "aws_iam_role" "backend" {
+  name = "${var.project_name}-backend-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "backend" {
+  name = "${var.project_name}-backend-policy"
+  role = aws_iam_role.backend.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ]
+        Resource = "${aws_s3_bucket.artifacts.arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sns:Publish"
+        ]
+        Resource = aws_sns_topic.asg_lifecycle.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "backend" {
+  name = "${var.project_name}-backend-profile"
+  role = aws_iam_role.backend.name
+}
+*/
+
+# Use existing profile for now
+resource "aws_iam_instance_profile" "backend" {
+  name = "${var.project_name}-backend-profile"
+  # This is a placeholder — in reality, reference existing:
+  # name = data.aws_iam_instance_profile.existing.name
+  
+  # Since we can't create IAM, we'll create a minimal profile
+  # ONLY if permissions allow. Otherwise, omit iam_instance_profile
+  # from launch template and handle everything via user_data.
+}
