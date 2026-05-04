@@ -1,4 +1,5 @@
-# Assignment-09
+**For the assignment that later was changed: [Assignment-09 (2) Dockerize and Deploy Express.js App Using Docker Compose with Nginx](Assignment-09-Docker.md)**
+# Assignment-09 (01)
 ## Assignment: Auto Scaling & CI/CD for 3-Tier Applications on AWS
 > **Assignment Objective:**
 > The objective of this assignment is to help students design and implement a highly available, auto-scalable 3-tier application architecture on AWS and integrate a CI/CD pipeline that supports deployment to Auto Scaling Groups using modern deployment strategies such as Blue/Green deployment.
