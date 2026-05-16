@@ -60,5 +60,5 @@ resource "aws_lb_target_group" "backend_green" {
 
 resource "aws_autoscaling_attachment" "backend_blue" {
   autoscaling_group_name = aws_autoscaling_group.backend.id
-  lb_target_group_arn   = aws_lb_target_group.backend_blue.arn
+  lb_target_group_arn    = aws_lb_target_group.backend_blue.arn
 }

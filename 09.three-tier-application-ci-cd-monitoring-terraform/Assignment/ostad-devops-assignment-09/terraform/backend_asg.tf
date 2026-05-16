@@ -10,7 +10,7 @@ resource "aws_launch_template" "backend" {
 
   vpc_security_group_ids = [aws_security_group.backend_ec2.id]
 
-  update_default_version = true 
+  update_default_version = true
 
   user_data = base64encode(templatefile("${path.module}/../application/scripts/user-data-backend.sh", {
     db_host     = aws_instance.database.private_ip
