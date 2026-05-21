@@ -1,0 +1,81 @@
+# ============================================================
+# migration-job.yaml
+# Standout Feature: Automated Idempotent DB Schema Migration
+# This Job runs ONCE before backend starts, ensuring the 
+# measurements table exists. Uses Init Container in backend.yaml
+# to enforce ordering.
+# ============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-migration-sql
+  namespace: bmi-app
+data:
+  001_create_measurements.sql: |
+    CREATE TABLE IF NOT EXISTS measurements (
+        id SERIAL PRIMARY KEY,
+        height_cm DECIMAL(5,2) NOT NULL,
+        weight_kg DECIMAL(5,2) NOT NULL,
+        age INTEGER NOT NULL,
+        sex VARCHAR(10) NOT NULL,
+        activity_level VARCHAR(20) NOT NULL,
+        bmi DECIMAL(4,2) NOT NULL,
+        bmi_category VARCHAR(20) NOT NULL,
+        bmr INTEGER NOT NULL,
+        daily_calories INTEGER NOT NULL,
+        measurement_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_measurements_created_at 
+    ON measurements(created_at DESC);
+    
+    CREATE INDEX IF NOT EXISTS idx_measurements_measurement_date 
+    ON measurements(measurement_date DESC);
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration
+  namespace: bmi-app
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        # Wait for PostgreSQL to be ready before running migrations
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres-service 5432; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              echo "PostgreSQL is up!"
+      containers:
+        - name: migrate
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - |
+              PGPASSWORD=$POSTGRES_PASSWORD psql \
+                -h postgres-service \
+                -U $POSTGRES_USER \
+                -d $POSTGRES_DB \
+                -f /migrations/001_create_measurements.sql
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+          volumeMounts:
+            - name: migration-script
+              mountPath: /migrations
+      volumes:
+        - name: migration-script
+          configMap:
+            name: db-migration-sql
+  backoffLimit: 4

@@ -1,0 +1,124 @@
+# ============================================================
+# postgres.yaml
+# PostgreSQL StatefulSet for the BMI Health Tracker
+# Includes: Secret, ConfigMap, PVC, StatefulSet, ClusterIP Service
+# ============================================================
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: bmi-app
+type: Opaque
+stringData:
+  # NEVER use weak passwords in production. These are for demo only.
+  POSTGRES_USER: "bmi_user"
+  POSTGRES_PASSWORD: "SecureBMI2026!"
+  POSTGRES_DB: "bmidb"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: bmi-app
+data:
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: bmi-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  # For Minikube, the default storage class is "standard"
+  storageClassName: standard
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: bmi-app
+spec:
+  serviceName: postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          # Production-grade resource limits
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          # Liveness: is PostgreSQL process alive?
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - bmi_user
+                - -d
+                - bmidb
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness: can we accept connections?
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - bmi_user
+                - -d
+                - bmidb
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: bmi-app
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres

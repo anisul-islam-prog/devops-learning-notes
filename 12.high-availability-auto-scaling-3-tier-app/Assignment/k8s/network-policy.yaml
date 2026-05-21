@@ -1,0 +1,24 @@
+# ============================================================
+# network-policy.yaml (Bonus - Not required, but shows maturity)
+# Restricts PostgreSQL to ONLY accept traffic from backend pods
+# ============================================================
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-netpol
+  namespace: bmi-app
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 5432

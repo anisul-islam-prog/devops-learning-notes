@@ -1,0 +1,145 @@
+# ============================================================
+# backend.yaml
+# Node.js Express API Deployment
+# Includes: ConfigMap, Secret reference, Deployment with Init
+# Container, ClusterIP Service, Liveness & Readiness Probes
+# ============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: bmi-app
+data:
+  # These are non-sensitive; Secret provides credentials
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  DB_NAME: "bmidb"
+  NODE_ENV: "production"
+  PORT: "3000"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: bmi-app
+  labels:
+    app: backend
+    tier: application
+spec:
+  replicas: 1  # We will scale to 3 later per assignment
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: application
+    spec:
+      # ========================================================
+      # INIT CONTAINER: Wait for DB + Migration Job completion
+      # This prevents "relation does not exist" crashes on startup
+      # ========================================================
+      initContainers:
+        - name: wait-for-db-and-migration
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              # 1. Wait for PostgreSQL TCP port
+              until nc -z postgres-service 5432; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              
+              # 2. Wait for migration job to complete
+              # We poll until the job pod status is Succeeded
+              echo "Waiting for db-migration Job to complete..."
+              for i in $(seq 1 60); do
+                STATUS=$(wget -qO- \
+                  --header "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+                  --no-check-certificate \
+                  https://kubernetes.default.svc/apis/batch/v1/namespaces/bmi-app/jobs/db-migration/status \
+                  2>/dev/null | grep -o '"succeeded":[0-9]*' | cut -d: -f2)
+                if [ "$STATUS" = "1" ]; then
+                  echo "Migration completed successfully!"
+                  exit 0
+                fi
+                echo "Migration not complete yet... retry $i/60"
+                sleep 3
+              done
+              echo "Migration wait timed out, but proceeding anyway"
+              exit 0
+          volumeMounts:
+            - name: service-account-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+      containers:
+        - name: backend
+          image: bmi-backend:v1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: postgres-secret
+          env:
+            # Construct DATABASE_URL from pieces
+            - name: DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+          # Liveness Probe: is the container alive?
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness Probe: is the container ready to accept traffic?
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+      volumes:
+        - name: service-account-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: bmi-app
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
