@@ -1,0 +1,166 @@
+pipeline {
+    agent any
+    
+    environment {
+        NODE_ENV = 'production'
+        APP_DIR = '/opt/app'
+        APP_SERVER_IP = credentials('app-server-ip')
+        SSH_KEY = credentials('app-server-ssh-key')
+    }
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 15, unit: 'MINUTES')
+        timestamps()
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                cleanWs()
+                checkout scm
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                dir('app') {
+                    sh '''
+                        echo "Node version: $(node -v)"
+                        echo "NPM version: $(npm -v)"
+                        npm ci --production
+                    '''
+                }
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                dir('app') {
+                    sh '''
+                        echo "Starting test suite..."
+                        npm test
+                    '''
+                }
+            }
+            post {
+                always {
+                    sh 'pkill -f "node server.js" || true'
+                    echo "Tests completed"
+                }
+            }
+        }
+        
+        stage('Build Artifact') {
+            steps {
+                script {
+                    env.BUILD_TIMESTAMP = sh(
+                        script: 'date +%Y%m%d-%H%M%S',
+                        returnStdout: true
+                    ).trim()
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git -C app rev-parse --short HEAD || git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+                dir('app') {
+                    sh '''
+                        # Create deploy directory outside workspace if possible, or use temp
+                        mkdir -p /tmp/deploy
+                        cp -r . /tmp/deploy/
+                        
+                        # Kill any lingering node process
+                        pkill -f "node server.js" || true
+                        sleep 1
+                        
+                        # Create tar in workspace root (outside the directory being archived)
+                        cd /tmp/deploy
+                        tar -czf ${WORKSPACE}/app-${BUILD_TIMESTAMP}-${GIT_COMMIT_SHORT}.tar.gz .
+                        
+                        # Move to expected location for deploy stage
+                        mv ${WORKSPACE}/app-${BUILD_TIMESTAMP}-${GIT_COMMIT_SHORT}.tar.gz ${WORKSPACE}/deploy/
+                        
+                        ls -lah ${WORKSPACE}/deploy/
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy to App Server') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'app-server-ssh-key',
+                        keyFileVariable: 'SSH_KEY_FILE',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    sh '''
+                        chmod 600 $SSH_KEY_FILE
+                        
+                        ssh -i $SSH_KEY_FILE -o StrictHostKeyChecking=no \
+                            $SSH_USER@$APP_SERVER_IP \
+                            "sudo mkdir -p /opt/app && sudo chown $SSH_USER:$SSH_USER /opt/app"
+                        
+                        scp -i $SSH_KEY_FILE -o StrictHostKeyChecking=no \
+                            deploy/app-${BUILD_TIMESTAMP}-${GIT_COMMIT_SHORT}.tar.gz \
+                            $SSH_USER@$APP_SERVER_IP:/tmp/
+                        
+                        ssh -i $SSH_KEY_FILE -o StrictHostKeyChecking=no \
+                            $SSH_USER@$APP_SERVER_IP << 'DEPLOYEOF'
+                            set -e
+                            cd /opt/app
+                            
+                            if [ -f server.js ]; then
+                                tar -czf backup-$(date +%Y%m%d-%H%M%S).tar.gz . 2>/dev/null || true
+                            fi
+                            
+                            rm -rf node_modules package-lock.json
+                            tar -xzf /tmp/app-${BUILD_TIMESTAMP}-${GIT_COMMIT_SHORT}.tar.gz
+                            
+                            npm ci --production
+                            
+                            if command -v pm2 &> /dev/null; then
+                                pm2 restart server.js || pm2 start server.js --name assignment-13-app
+                                pm2 save
+                            else
+                                pkill -f "node server.js" || true
+                                nohup node server.js > /var/log/app.log 2>&1 &
+                            fi
+                            
+                            sleep 2
+                            curl -f http://localhost:3000/health || exit 1
+DEPLOYEOF
+                        
+                        echo "Deployment completed successfully!"
+                    '''
+                }
+            }
+        }
+        
+        stage('Smoke Test') {
+            steps {
+                sh '''
+                    echo "Running smoke tests against deployed application..."
+                    sleep 3
+                    curl -f http://${APP_SERVER_IP}:3000/health
+                    curl -f http://${APP_SERVER_IP}:3000/
+                    echo "Smoke tests passed!"
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo "Pipeline execution completed"
+            cleanWs()
+        }
+        success {
+            echo "✅ Pipeline succeeded! Build #${BUILD_NUMBER}"
+        }
+        failure {
+            echo "❌ Pipeline failed! Check logs for details."
+        }
+    }
+}
