@@ -1271,23 +1271,8 @@ If the job page shows this immediately after saving, the `Jenkinsfile` was found
 - **"No builds yet"** → Click **Build Now**
 - After building, you should see stages: **Checkout → Install Dependencies → Run Tests → Build Artifact → Deploy to App Server → Smoke Test**
 
----
 
-## Quick Troubleshooting
-
-| What You See | Fix |
-|-------------|-----|
-| No `Pipeline` option when creating job | Install **Pipeline** plugin: `Manage Jenkins` → `Plugins` → `Available` → search `Pipeline` → install → restart |
-| `Jenkinsfile not found` error | Verify your GitHub repo has `jenkins/Jenkinsfile` at that exact path |
-| `Could not resolve to a branch` | Verify repo exists, is public, and branch is `main` |
-| `No such credentials` | Verify credential IDs in `Jenkinsfile` match exactly what you created |
-
----
-
-**Ready to build? If you get an error on the first build, paste the Console Output here and I'll debug it.**
----
-
-## PART 7: Zabbix Configuration Guide
+## Zabbix Configuration Guide
 
 ### Access Zabbix UI
 - URL: `http://<ZABBIX_PUBLIC_IP>/zabbix`
@@ -1369,7 +1354,7 @@ curl -X POST -H "Content-Type: application/json" \
 
 ---
 
-## PART 8: Screenshots Checklist
+## Screenshots Checklist
 
 ### Jenkins Screenshots Required:
 1. **Pipeline Stage View** (Blue Ocean or classic view showing all stages green)
@@ -1385,9 +1370,8 @@ curl -X POST -H "Content-Type: application/json" \
 
 ---
 
-## PART 9: Report Template
+## Report
 
-```markdown
 # Assignment-13 Report: Jenkins CI/CD & Zabbix Monitoring
 
 ## 1. Implementation Overview
@@ -1462,11 +1446,10 @@ Deployed a 3-tier monitoring and CI/CD infrastructure on AWS EC2 using Terraform
 - Configure Zabbix alerting via Slack/Email
 - Implement log aggregation with ELK stack
 - Add automated backup policies for Zabbix database
-```
 
 ---
 
-## PART 10: The "One-Man Army" Edge — Best Practice Recommendation
+## Best Practice Recommendation
 
 ### 🏆 **Implement "GitOps-Style Pipeline with Automated Rollback"**
 
@@ -1515,16 +1498,9 @@ ROLLBACK
     }
 }
 ```
-
-### Why This Stands Out:
-1. **Production-Ready Thinking**: Shows you understand deployment risks
-2. **Self-Healing**: Pipeline can recover from failed deployments automatically
-3. **Zero-Downtime Awareness**: Demonstrates operational maturity beyond basic CI/CD
-4. **Industry Standard**: Aligns with SRE practices and GitOps principles
-
 ---
 
-## PART 11: Quick Reference Commands
+## Quick Reference Commands
 
 ```bash
 # Terraform
@@ -1551,11 +1527,7 @@ sudo tail -f /var/log/zabbix/zabbix_agent2.log
 
 ---
 
-# Assignment-13: Complete Execution Plan — Part 2
-
----
-
-## PART 3: Advanced Zabbix Configuration & Custom Dashboards
+## Advanced Zabbix Configuration & Custom Dashboards
 
 ### 3.1 Zabbix Web UI Initial Login
 
@@ -1720,7 +1692,7 @@ Applications: Application Health
 └───────────────────────────────────┘
 ```
 
-### 3.6 Zabbix Screen Configuration (Optional but Impressive)
+### 3.6 Zabbix Screen Configuration (Optional)
 
 Screens are static layouts (predecessor to Dashboards, but good for presentations):
 
@@ -1773,7 +1745,7 @@ top
 
 ---
 
-## PART 4: Screenshot Capture Guide & Report Formatting
+## Screenshot Capture Guide
 
 ### 4.1 Required Screenshots (Assignment Checklist)
 
@@ -1797,124 +1769,7 @@ top
 | 4 | **Trigger Configuration** | Configuration → Hosts → app-server → Triggers → Screenshot of CPU > 80% rule |
 | 5 | **Trigger Firing** | Monitoring → Problems → Show the CPU alert in PROBLEM state (use `stress` command) |
 
-### 4.2 Screenshot Best Practices
-
-1. **Use browser zoom:** Set zoom to 90-100% for clean captures
-2. **Full page captures:** Use browser extensions like "GoFullPage" (Chrome) or Firefox built-in screenshot
-3. **Annotations:** Add red arrows/circles to highlight:
-   - Green checkmarks in Jenkins
-   - Trigger severity levels in Zabbix
-   - IP addresses and key values
-4. **Blur sensitive data:** Use Paint/GIMP to blur:
-   - AWS Account IDs
-   - Actual IP addresses (optional)
-   - SSH private keys
-   - Passwords
-
-### 4.3 Report Formatting (LaTeX/Markdown Template)
-
-If submitting as PDF, use this Markdown structure:
-
-```markdown
-# Assignment-13: Jenkins CI/CD & Zabbix Monitoring
-## Submitted by: [Your Name]
-## Course: Mastering DevOps, Ostad
-## Date: [Date]
-
----
-
-## Table of Contents
-1. [Architecture Overview](#1-architecture-overview)
-2. [Infrastructure Setup](#2-infrastructure-setup)
-3. [Jenkins CI/CD Implementation](#3-jenkins-cicd-implementation)
-4. [Zabbix Monitoring Implementation](#4-zabbix-monitoring-implementation)
-5. [Challenges & Solutions](#5-challenges--solutions)
-6. [Key Learnings](#6-key-learnings)
-7. [Screenshots](#7-screenshots)
-
----
-
-## 1. Architecture Overview
-[Insert architecture diagram]
-
-## 2. Infrastructure Setup
-Terraform was used to provision:
-- 1 VPC (10.0.0.0/16)
-- 1 Public Subnet (10.0.1.0/24)
-- 1 Internet Gateway
-- 3 EC2 instances (t2.micro)
-- 3 Security Groups
-- S3 bucket for Terraform state
-
-### Terraform Outputs:
-| Resource | Public IP | Private IP |
-|----------|-----------|------------|
-| Jenkins | 3.82.x.x | 10.0.1.x |
-| Zabbix | 44.200.x.x | 10.0.1.x |
-| App Server | 54.81.x.x | 10.0.1.x |
-
-## 3. Jenkins CI/CD Implementation
-### Pipeline Stages:
-1. **Checkout** - Pull from GitHub
-2. **Install Dependencies** - npm ci
-3. **Run Tests** - Integration tests
-4. **Build Artifact** - Timestamped tarball
-5. **Deploy** - SSH to app server
-6. **Smoke Test** - HTTP health check
-
-### Key Features:
-- Pipeline as Code (Jenkinsfile in SCM)
-- Credential management via Jenkins Credentials Store
-- Automated deployment with backup/rollback capability
-
-## 4. Zabbix Monitoring Implementation
-### Configuration:
-- Zabbix Server 7.0 LTS
-- MySQL 8.0 backend
-- 3 monitored hosts with Zabbix Agent 2
-- Custom dashboard with 5 widgets
-
-### Triggers:
-| Trigger | Expression | Severity |
-|---------|-----------|----------|
-| High CPU | `last(/app-server/system.cpu.util)>80` | High |
-| Low Memory | `last(/app-server/vm.memory.size[pavailable])<20` | Warning |
-
-## 5. Challenges & Solutions
-| Challenge | Solution |
-|-----------|----------|
-| AWS IAM/CodeDeploy unavailable | Used Terraform + SSH-based deployment |
-| Zabbix Agent 2 connectivity | Verified SG rules and ServerActive directive |
-| Jenkins plugin timeouts | Pre-installed via user_data script |
-
-## 6. Key Learnings
-1. Infrastructure as Code ensures reproducibility
-2. Pipeline as Code enables version-controlled CI/CD
-3. Monitoring should be implemented before deployment
-4. Zabbix Agent 2 offers superior performance over Agent 1
-5. Credential security is paramount in CI/CD pipelines
-
-## 7. Screenshots
-[Insert all 10 screenshots with captions]
-```
-
-### 4.4 Convert Markdown to PDF
-
-```bash
-# Install pandoc and wkhtmltopdf
-sudo apt-get install -y pandoc wkhtmltopdf
-
-# Convert to PDF
-pandoc report.md -o Assignment-13-Report.pdf \
-    --pdf-engine=wkhtmltopdf \
-    --metadata title="Assignment-13 Report" \
-    --metadata author="Your Name" \
-    -V geometry:margin=1in
-```
-
----
-
-## PART 5: Cleanup Procedures & Cost Optimization
+## Cleanup Procedures & Cost Optimization
 
 ### 5.1 Daily Cost Estimate (AWS Free Tier)
 
@@ -1956,7 +1811,7 @@ aws ec2 stop-instances --instance-ids i-xxxxxxxx i-yyyyyyyy i-zzzzzzzz
 aws ec2 start-instances --instance-ids i-xxxxxxxx i-yyyyyyyy i-zzzzzzzz
 ```
 
-### 5.4 Automated Cleanup via Lambda (Bonus - Not Required)
+### 5.4 Automated Cleanup via Lambda (Optional)
 
 If you want to show advanced skills, create a Lambda function that auto-stops instances at night:
 
@@ -1991,7 +1846,7 @@ def lambda_handler(event, context):
 
 ---
 
-## PART 6: Troubleshooting Guide
+## Troubleshooting Guide
 
 ### 6.1 Jenkins Issues
 
@@ -2023,7 +1878,7 @@ def lambda_handler(event, context):
 
 ---
 
-## PART 7: Submission Checklist
+## Submission Checklist
 
 Before submitting, verify:
 
@@ -2039,13 +1894,3 @@ Before submitting, verify:
 - [ ] (Optional) GitHub repository contains app code + Jenkinsfile + Terraform
 
 ---
-
-**This completes Part 2 of the execution plan, covering:**
-- ✅ Advanced Zabbix configuration (dashboards, maps, custom items, triggers)
-- ✅ Screenshot capture guide with exact steps
-- ✅ Report formatting template (Markdown → PDF)
-- ✅ Cleanup procedures and cost estimates
-- ✅ Comprehensive troubleshooting guide
-- ✅ Final submission checklist
-
-**All components of the assignment have now been covered in full detail. If you need any specific section expanded, clarification on a step, or help debugging during actual deployment, let me know!**
