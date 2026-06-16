@@ -4,7 +4,7 @@ resource "aws_security_group" "jenkins" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH"
+    description = "SSH from my IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -12,7 +12,7 @@ resource "aws_security_group" "jenkins" {
   }
 
   ingress {
-    description = "Jenkins UI"
+    description = "Jenkins UI from my IP"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
@@ -20,11 +20,11 @@ resource "aws_security_group" "jenkins" {
   }
 
   ingress {
-    description = "Allow from Zabbix Server"
+    description = "Allow from within VPC"
     from_port   = 0
     to_port     = 65535
     protocol    = "tcp"
-    cidr_blocks = [aws_subnet.public.cidr_block]
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
   egress {
@@ -45,7 +45,7 @@ resource "aws_security_group" "zabbix" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH"
+    description = "SSH from my IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -53,7 +53,7 @@ resource "aws_security_group" "zabbix" {
   }
 
   ingress {
-    description = "Zabbix Web UI"
+    description = "Zabbix Web UI from my IP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -61,19 +61,19 @@ resource "aws_security_group" "zabbix" {
   }
 
   ingress {
-    description = "Zabbix Server Port"
+    description = "Zabbix Server Port from VPC"
     from_port   = 10051
     to_port     = 10051
     protocol    = "tcp"
-    cidr_blocks = [aws_subnet.public.cidr_block]
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
   ingress {
-    description = "Zabbix Agent Port"
+    description = "Zabbix Agent Port from VPC"
     from_port   = 10050
     to_port     = 10050
     protocol    = "tcp"
-    cidr_blocks = [aws_subnet.public.cidr_block]
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
   egress {
@@ -94,7 +94,7 @@ resource "aws_security_group" "appserver" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH"
+    description = "SSH from my IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -102,19 +102,27 @@ resource "aws_security_group" "appserver" {
   }
 
   ingress {
+    description = "SSH from within VPC"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+
+  ingress {
     description = "Node.js App"
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = [aws_subnet.public.cidr_block, var.my_ip]
+    cidr_blocks = [aws_vpc.main.cidr_block, var.my_ip]
   }
 
   ingress {
-    description = "Zabbix Agent"
+    description = "Zabbix Agent from VPC"
     from_port   = 10050
     to_port     = 10050
     protocol    = "tcp"
-    cidr_blocks = [aws_subnet.public.cidr_block]
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
   egress {

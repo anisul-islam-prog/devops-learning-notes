@@ -574,11 +574,11 @@ echo "Starting Zabbix installation at $(date)"
 apt-get update -y
 apt-get upgrade -y
 
-# Install dependencies
+# Install Apache and PHP FIRST
 apt-get install -y \
     apache2 \
-    mysql-server-8.0 \
     php \
+    libapache2-mod-php \
     php-mysql \
     php-gd \
     php-bcmath \
@@ -590,19 +590,23 @@ apt-get install -y \
     php-zip \
     php-intl \
     php-fpm \
-    libapache2-mod-php \
+    mysql-server-8.0 \
     gnupg \
     curl \
     software-properties-common
 
-# Configure MySQL
-mysql -e "CREATE DATABASE zabbix CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;"
-mysql -e "CREATE USER 'zabbix'@'localhost' IDENTIFIED BY 'zabbix_password';"
-mysql -e "GRANT ALL PRIVILEGES ON zabbix.* TO 'zabbix'@'localhost';"
-mysql -e "SET GLOBAL log_bin_trust_function_creators = 1;"
-mysql -e "FLUSH PRIVILEGES;"
+# Start Apache and MySQL immediately
+systemctl start apache2
+systemctl start mysql
 
-# Install Zabbix 7.0 LTS
+# Configure MySQL
+mysql -e "CREATE DATABASE IF NOT EXISTS zabbix CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;" || true
+mysql -e "CREATE USER IF NOT EXISTS 'zabbix'@'localhost' IDENTIFIED BY 'zabbix_password';" || true
+mysql -e "GRANT ALL PRIVILEGES ON zabbix.* TO 'zabbix'@'localhost';" || true
+mysql -e "SET GLOBAL log_bin_trust_function_creators = 1;" || true
+mysql -e "FLUSH PRIVILEGES;" || true
+
+# Install Zabbix 7.0
 wget -q https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_7.0-2+ubuntu22.04_all.deb
 dpkg -i zabbix-release_7.0-2+ubuntu22.04_all.deb
 apt-get update -y
@@ -615,60 +619,57 @@ apt-get install -y \
     zabbix-agent \
     zabbix-get
 
-# Import initial schema
-zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz | mysql --default-character-set=utf8mb4 -uzabbix -pzabbix_password zabbix
+# Import schema (only if tables don't exist)
+TABLE_COUNT=$(mysql -uzabbix -pzabbix_password zabbix -e "SHOW TABLES;" 2>/dev/null | wc -l || echo "0")
+if [ "$TABLE_COUNT" -lt "5" ]; then
+    zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz | mysql --default-character-set=utf8mb4 -uzabbix -pzabbix_password zabbix
+fi
 
-# Reset MySQL setting
-mysql -e "SET GLOBAL log_bin_trust_function_creators = 0;"
+mysql -e "SET GLOBAL log_bin_trust_function_creators = 0;" || true
 
 # Configure Zabbix Server
 sed -i 's/# DBPassword=/DBPassword=zabbix_password/' /etc/zabbix/zabbix_server.conf
 
-# Configure PHP for Zabbix
-sed -i 's/post_max_size = 8M/post_max_size = 16M/' /etc/php/8.1/apache2/php.ini
-sed -i 's/max_execution_time = 30/max_execution_time = 300/' /etc/php/8.1/apache2/php.ini
-sed -i 's/max_input_time = 60/max_input_time = 300/' /etc/php/8.1/apache2/php.ini
-sed -i 's/;date.timezone =/date.timezone = Asia\/Dhaka/' /etc/php/8.1/apache2/php.ini
+# Configure PHP
+PHP_INI=$(php -r "echo php_ini_loaded_file();")
+sed -i 's/post_max_size = 8M/post_max_size = 16M/' "$PHP_INI"
+sed -i 's/max_execution_time = 30/max_execution_time = 300/' "$PHP_INI"
+sed -i 's/max_input_time = 60/max_input_time = 300/' "$PHP_INI"
+sed -i 's/;date.timezone =/date.timezone = Asia\/Dhaka/' "$PHP_INI"
 
-# Configure Apache for Zabbix
-cat > /etc/apache2/conf-available/zabbix.conf << 'EOF'
+# Ensure Zabbix Apache config is enabled
+if [ -f /etc/apache2/conf-available/zabbix.conf ]; then
+    a2enconf zabbix
+else
+    # Create config if missing
+    tee /etc/apache2/conf-available/zabbix.conf << 'EOF'
 Alias /zabbix /usr/share/zabbix
 
-<Directory "/usr/share/zabbix">
+<<Directory "/usr/share/zabbix">
     Options FollowSymLinks
     AllowOverride None
     Require all granted
-
-    <IfModule mod_php.c>
-        php_value max_execution_time 300
-        php_value memory_limit 128M
-        php_value post_max_size 16M
-        php_value upload_max_filesize 2M
-        php_value max_input_time 300
-        php_value max_input_vars 10000
-        php_value always_populate_raw_post_data -1
-        php_value date.timezone Asia/Dhaka
-    </IfModule>
 </Directory>
 
-<Directory "/usr/share/zabbix/conf">
+<<Directory "/usr/share/zabbix/conf">
     Require all denied
 </Directory>
 
-<Directory "/usr/share/zabbix/app">
+<<Directory "/usr/share/zabbix/app">
     Require all denied
 </Directory>
 
-<Directory "/usr/share/zabbix/include">
+<<Directory "/usr/share/zabbix/include">
     Require all denied
 </Directory>
 
-<Directory "/usr/share/zabbix/local">
+<<Directory "/usr/share/zabbix/local">
     Require all denied
 </Directory>
 EOF
+    a2enconf zabbix
+fi
 
-a2enconf zabbix
 a2enmod rewrite
 systemctl restart apache2
 
@@ -676,12 +677,17 @@ systemctl restart apache2
 systemctl restart zabbix-server zabbix-agent apache2
 systemctl enable zabbix-server zabbix-agent apache2
 
-# Install Zabbix Agent 2 (modern replacement)
+# Install Zabbix Agent 2
 apt-get install -y zabbix-agent2
 systemctl enable zabbix-agent2
 systemctl start zabbix-agent2
 
+# Verify Apache can serve PHP
+echo "<?php phpinfo(); ?>" > /var/www/html/info.php
+
 echo "Zabbix installation completed at $(date)"
+echo "Zabbix URL: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)/zabbix"
+echo "Test PHP: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)/info.php"
 ```
 
 ### `terraform/user_data/appserver.sh`
@@ -697,13 +703,19 @@ echo "Starting App Server setup at $(date)"
 apt-get update -y
 apt-get upgrade -y
 
-# Install dependencies
+# Remove any pre-installed nodejs packages FIRST to avoid conflicts
+apt-get remove -y libnode-dev nodejs npm || true
+apt-get autoremove -y
+
+# Install Node.js 20.x from NodeSource
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+
+# Install other dependencies
 apt-get install -y \
     curl \
     git \
     docker.io \
-    nodejs \
-    npm \
     awscli \
     jq
 
@@ -712,6 +724,9 @@ systemctl start docker
 systemctl enable docker
 usermod -aG docker ubuntu
 
+# Install PM2 globally
+npm install -g pm2
+
 # Install Zabbix Agent 2
 wget -q https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_7.0-2+ubuntu22.04_all.deb
 dpkg -i zabbix-release_7.0-2+ubuntu22.04_all.deb
@@ -719,7 +734,6 @@ apt-get update -y
 apt-get install -y zabbix-agent2
 
 # Configure Zabbix Agent 2
-# Will be configured after Zabbix server IP is known
 cat > /etc/zabbix/zabbix_agent2.conf << 'EOF'
 PidFile=/var/run/zabbix/zabbix_agent2.pid
 LogFile=/var/log/zabbix/zabbix_agent2.log
@@ -737,7 +751,13 @@ systemctl start zabbix-agent2
 mkdir -p /opt/app
 chown ubuntu:ubuntu /opt/app
 
+# Create writable log directory for app
+mkdir -p /var/log/app
+chown ubuntu:ubuntu /var/log/app
+
 echo "App Server setup completed at $(date)"
+echo "Node version: $(node -v)"
+echo "PM2 version: $(pm2 -v || echo 'pm2 not found')"
 ```
 
 ---
@@ -1176,9 +1196,9 @@ Once plugins are installed:
 |-------|-------|
 | **Kind** | `Secret text` |
 | **Scope** | `Global` |
-| **Secret** | `10.161.129.246` |
+| **Secret** | `10.0.0.165` |
 | **ID** | `app-server-ip` |
-| **Description** | `App server public IP` |
+| **Description** | `App server private IP` |
 
 Click **Create**
 
@@ -1271,7 +1291,10 @@ If the job page shows this immediately after saving, the `Jenkinsfile` was found
 - **"No builds yet"** → Click **Build Now**
 - After building, you should see stages: **Checkout → Install Dependencies → Run Tests → Build Artifact → Deploy to App Server → Smoke Test**
 
+![alt text](image.png)
 
+# TESTED OK------
+---
 ## Zabbix Configuration Guide
 
 ### Access Zabbix UI
