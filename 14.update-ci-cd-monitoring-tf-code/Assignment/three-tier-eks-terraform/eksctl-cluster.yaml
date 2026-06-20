@@ -1,0 +1,45 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: three-tier-eks
+  region: us-east-1
+
+vpc:
+  id: "vpc-0b44bbd7ed0cdd72c"
+  subnets:
+    private:
+      us-east-1a: { id: "subnet-01533f2a042d497c3" }
+      us-east-1b: { id: "subnet-0908c978eecad592c" }
+    public:
+      us-east-1a: { id: "subnet-09a74ce0706d0bf43" }
+      us-east-1b: { id: "subnet-0d9404ff70c6f0a00" }
+  clusterEndpoints:
+    publicAccess: true
+    privateAccess: false
+  publicAccessCIDRs: ["0.0.0.0/0"]
+
+managedNodeGroups:
+  - name: standard-workers
+    instanceType: t3.medium
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 2
+    volumeSize: 20
+    volumeType: gp2
+    privateNetworking: true
+    ssh:
+      allow: false
+    labels:
+      role: worker
+    tags:
+      environment: production
+      project: three-tier-app
+
+cloudWatch:
+  clusterLogging:
+    enableTypes: []
+
+iam:
+  withOIDC: false
+  serviceAccounts: []
