@@ -1,0 +1,11 @@
+# manifests/10-pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: bmi-app
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: backend

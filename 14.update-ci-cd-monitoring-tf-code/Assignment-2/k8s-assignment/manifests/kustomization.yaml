@@ -1,0 +1,32 @@
+# manifests/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bmi-app
+
+resources:
+  - 00-namespace.yaml
+  - 01-secrets.yaml
+  - 02-configmap.yaml
+  - 03-pvc.yaml
+  - 04-database-deployment.yaml
+  - 05-backend-deployment.yaml
+  - 06-frontend-deployment.yaml
+  - 07-services.yaml
+  - 08-ingress.yaml
+
+images:
+  - name: bmi-backend
+    newTag: v1.0
+  - name: bmi-frontend
+    newTag: v1.0
+
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    literals:
+      - NODE_ENV=production
+
+commonLabels:
+  managed-by: kustomize
+  project: bmi-health-tracker

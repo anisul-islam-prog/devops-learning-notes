@@ -1,0 +1,35 @@
+# manifests/02-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: bmi-app
+data:
+  # Backend config
+  NODE_ENV: "production"
+  PORT: "3000"
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  CORS_ORIGIN: "*"
+  
+  # Frontend config (for build-time injection if needed)
+  VITE_API_URL: "/api"
+  
+  # Database init script
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS measurements (
+        id SERIAL PRIMARY KEY,
+        weight_kg DECIMAL(5,2) NOT NULL,
+        height_cm DECIMAL(5,2) NOT NULL,
+        age INTEGER NOT NULL,
+        sex VARCHAR(10) NOT NULL,
+        activity_level VARCHAR(20) DEFAULT 'moderate',
+        bmi DECIMAL(5,2) NOT NULL,
+        bmi_category VARCHAR(20) NOT NULL,
+        bmr DECIMAL(8,2) NOT NULL,
+        daily_calories DECIMAL(8,2) NOT NULL,
+        measurement_date DATE DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_measurement_date ON measurements(measurement_date);

@@ -1,0 +1,9 @@
+# manifests/00-namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bmi-app
+  labels:
+    app.kubernetes.io/name: bmi-health-tracker
+    app.kubernetes.io/version: "1.0"
+    environment: production
