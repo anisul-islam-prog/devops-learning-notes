@@ -1047,7 +1047,7 @@ kubectl top nodes
 
 **Expected Output:**
 
-```
+```plain
 NAME                                           STATUS   ROLES    AGE   VERSION
 ip-10-0-1-xxx.us-east-1.compute.internal       Ready    <none>   10m   v1.29.x
 ip-10-0-2-xxx.us-east-1.compute.internal       Ready    <none>   10m   v1.29.x
@@ -1071,7 +1071,7 @@ kubectl top pods -n three-tier
 
 **Expected Output:**
 
-```
+```plain
 NAME                         STATUS   NODE                           APP
 database-0                   Running  ip-10-0-1-xxx...               database
 backend-7c9f4b8d5-abc12      Running  ip-10-0-1-xxx...               backend
@@ -1132,7 +1132,7 @@ kubectl describe hpa backend-hpa -n three-tier
 
 **Expected Output:**
 
-```
+```plain
 NAME         REFERENCE            TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
 backend-hpa  Deployment/backend   15%/70%   3         6         3          5m
 ```
@@ -1154,7 +1154,7 @@ kubectl describe pvc database-pvc -n three-tier
 
 **Expected Output:**
 
-```
+```plain
 NAME           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
 database-pvc   Bound    pvc-abc123-def456-ghi789                   10Gi       RWO            gp3            10m
 ```
@@ -1164,7 +1164,7 @@ database-pvc   Bound    pvc-abc123-def456-ghi789                   10Gi       RW
 ### 8.7 Screenshot Checklist for Submission
 
 | # | Screenshot / Log | Command |
-|---|------------------|---------|
+| --- | ------------------ | --------- |
 | 1 | EKS Cluster Console | AWS Console → EKS → Clusters |
 | 2 | Node Group Details | AWS Console → EKS → Compute |
 | 3 | `kubectl get nodes -o wide` | Terminal |
@@ -1243,7 +1243,7 @@ aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$(terraform output -r
 ### 9.5 Screenshot Checklist for Cleanup
 
 | # | Evidence | Command / Action |
-|---|----------|----------------|
+| --- | ---------- | ---------------- |
 | 1 | `terraform destroy` success log | Terminal screenshot |
 | 2 | Empty EKS clusters list | `aws eks list-clusters` |
 | 3 | Empty LoadBalancers list | AWS Console → EC2 → Load Balancers |
@@ -1264,7 +1264,7 @@ Additionally, configure **Pod Disruption Budgets (PDBs)** and **graceful termina
 ### Why It works when you don't own the repo
 
 | Aspect | Standard Submission | Your Submission |
-|--------|---------------------|-----------------|
+| -------- | --------------------- | ----------------- |
 | Autoscaling | Basic HPA (CPU/Memory only) | **KEDA**: Scales on HTTP requests, DB latency, custom app metrics |
 | Availability | No protection during node drains | **PDB**: Ensures minimum replicas during disruptions |
 | Observability | No metrics visibility | **Prometheus**: Full metrics pipeline, ready for Grafana |
@@ -1505,7 +1505,7 @@ kubectl run -it loader --image=busybox --restart=Never -- /bin/sh -c "while true
 ## What to Submit
 
 | # | Evidence | Screenshot / Log |
-|---|----------|------------------|
+| --- | ---------- | ------------------ |
 | 1 | KEDA pods running | `kubectl get pods -n keda` |
 | 2 | ScaledObject configured | `kubectl get scaledobjects -n three-tier -o yaml` |
 | 3 | Prometheus UI accessible | Browser → `localhost:9090` (port-forward) |
@@ -1524,7 +1524,7 @@ kubectl run -it loader --image=busybox --restart=Never -- /bin/sh -c "while true
 ## 12. Final Checklist
 
 | # | Requirement | Status |
-|---|-------------|--------|
+| --- | ------------- | -------- |
 | 1 | EKS cluster v1.29+ | ✅ |
 | 2 | 2× t3.medium managed nodes | ✅ |
 | 3 | VPC with 2 public + 2 private subnets | ✅ |
