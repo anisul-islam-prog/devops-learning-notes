@@ -96,6 +96,7 @@ Repository: https://github.com/sarowar-alam/3-tier-app-terraform-jenkins
   - ConfigMaps → environment variables
 - Inject values into pods using environment variables
 ```
+
 ---
 
 ## Scalable Kubernetes Deployment of BMI Health Tracker (3-Tier App)
