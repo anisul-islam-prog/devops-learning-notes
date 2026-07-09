@@ -205,8 +205,8 @@ resource "aws_security_group" "app_sg" {
   }
 
   ingress {
-    from_port   = 5000
-    to_port     = 5000
+    from_port   = 3000
+    to_port     = 3000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
     description = "Flask app port"
@@ -602,7 +602,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Install dependencies
         run: |
@@ -719,7 +719,7 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:5000';
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
 
 export default function () {
   // Test 1: Health check
@@ -754,14 +754,14 @@ export default function () {
 ```bash
 # Start the app locally
 docker build -t ostad-app .
-docker run -d -p 5000:5000 --name ostad-app ostad-app
+docker run -d -p 3000:3000 --name ostad-app ostad-app
 
 # Install k6 (if not already installed)
 # macOS: brew install k6
 # Linux: sudo gpg -k && sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69 && echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list && sudo apt-get update && sudo apt-get install k6
 
 # Run load test
-k6 run --env BASE_URL=http://localhost:5000 load-tests/load-test.js
+k6 run --env BASE_URL=http://localhost:3000 load-tests/load-test.js
 ```
 
 ### Step 3.3: Integrate k6 into CI Pipeline
@@ -784,12 +784,12 @@ Updated workflow snippet for load testing:
       app:
         image: ghcr.io/${{ github.repository }}/ostad-app:${{ github.sha }}
         ports:
-          - 5000:5000
+          - 3000:3000
         env:
           DATABASE_URL: sqlite:///data/app.db
           SECRET_KEY: test-secret-key
         options: >-
-          --health-cmd "curl -f http://localhost:5000/health || exit 1"
+          --health-cmd "curl -f http://localhost:3000/health || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -802,7 +802,7 @@ Updated workflow snippet for load testing:
         uses: grafana/k6-action@v0.3.1
         with:
           filename: load-tests/load-test.js
-          flags: --env BASE_URL=http://localhost:5000
+          flags: --env BASE_URL=http://localhost:3000
 ```
 
 **Alternative (Simpler for Assignment):** Run k6 against your deployed EC2 after deployment. We'll cover this in Part 4 when we wire up the full deploy stage.
@@ -811,7 +811,7 @@ Updated workflow snippet for load testing:
 
 After running k6, you will see output like:
 
-```
+```plain
      checks.........................: 100.00% ✓ 4500      ✗ 0
      data_received..................: 1.2 MB  10 kB/s
      data_sent......................: 890 kB  7.4 kB/s
@@ -837,7 +837,54 @@ After running k6, you will see output like:
   - 50–100 VUs simulated
   - Response time metrics (avg, p95)
   - Failure rate (should be 0% or <5%)
-- Short written summary (3–4 sentences) explaining the results
+![alt text](image-5.png)
+- Short written summary (3–4 sentences) explaining the results:
+
+#### Load Test Summary
+
+**Test Configuration:** k6 simulated up to **100 virtual users** over **2 minutes** across three stages (ramp to 50 VUs, sustain 100 VUs, ramp down). The test targeted a local Flask application backed by SQLite.
+
+**Overall Result:** **Partially Failed** — The **p(95) latency threshold** (`< 500 ms`) was breached, while the **error rate threshold** (`< 5%`) passed comfortably.
+
+---
+
+#### Key Metrics
+
+| Metric | Value | Assessment |
+| -------- | ------- | ------------ |
+| **Total Requests** | 14,535 | ~121 req/s throughput |
+| **Iterations** | 4,845 | Each iteration = 3 requests (health + create + get) |
+| **Error Rate** | **0.00%** | Excellent — only 1 HTTP request failed across the entire test |
+| **Avg Response Time** | 136.39 ms | Acceptable under load |
+| **p(95) Response Time** | **691.18 ms** | **Failed** threshold of 500 ms |
+| **Max Response Time** | 6.22 s | Indicates sporadic latency spikes |
+
+---
+
+#### Check-Level Breakdown
+
+| Check | Pass Rate | Notes |
+| ------- | ----------- | ------- |
+| Health status `200` | 100% | App remained reachable |
+| Health response `< 200 ms` | 100% | Lightweight endpoint performed well |
+| Create task status `201` | 99% | 1 failure (likely a transient timeout or CSRF/token issue at peak load) |
+| Create task response `< 500 ms` | **84%** | **Primary bottleneck** — 739 requests exceeded 500 ms |
+| Get tasks status `200` | 100% | Read operations succeeded |
+| Get tasks response `< 300 ms` | **80%** | 927 requests exceeded 300 ms |
+
+---
+
+#### Analysis
+
+1. **Functional Stability:** The application did not crash. With a **0.00% HTTP failure rate**, the Flask app handled the concurrency functionally.
+2. **Latency Degradation:** Under 100 VUs, the **p(95) latency hit 691 ms**, breaching the 500 ms threshold. The worst offenders were the **POST /tasks** and **GET /tasks** endpoints.
+3. **Root Cause (Likely):** SQLite uses file-level locking. With 100 concurrent VUs hitting write operations (`POST`) and reads (`GET`) against a local SQLite database, contention and I/O blocking cause the observed tail latency (p95/p99) and the 6.22 s max spike. This is expected for a local file-based database under load.
+
+---
+
+#### Recommendation
+
+For a production-like setup, replace SQLite with a proper RDBMS (PostgreSQL/MySQL) or use an in-memory store for load testing. For this assignment, the results are valid: you successfully simulated 100 users, measured response times, identified a latency threshold breach, and demonstrated that the application remains functionally stable (0% failures) even when performance degrades.
 
 ---
 
@@ -916,7 +963,7 @@ After the first Trivy scan, you will likely find these common issues:
 Updated `Dockerfile`:
 
 ```dockerfile
-FROM python:3.11-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 # Update system packages to patch known CVEs
 RUN apt-get update && \
@@ -941,26 +988,27 @@ ENV DATABASE_URL=sqlite:///data/app.db
 RUN useradd -m -u 1000 appuser && mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 5000
+EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')" || exit 1
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "60", "app.main:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:3000", "--workers", "2", "--timeout", "60", "app.main:app"]
 ```
 
 #### Vulnerability 2: Hardcoded Credentials or Weak Permissions
 
 **Issue:** Trivy filesystem scan may flag hardcoded secrets or detect that the Dockerfile runs as `root`.
 
-**Fix:** 
+**Fix:**
 
 1. Remove any hardcoded secrets (covered in Part 4)
 2. Add `USER appuser` to the Dockerfile (already added above)
 3. Ensure no `.env` files are committed to git (add to `.gitignore`)
 
 **`.gitignore`**
-```
+
+```plain
 __pycache__/
 *.pyc
 .env
@@ -1116,12 +1164,12 @@ jobs:
       app:
         image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
         ports:
-          - 5000:5000
+          - 3000:3000
         env:
           DATABASE_URL: sqlite:///data/app.db
           SECRET_KEY: test-secret-key
         options: >-
-          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""
+          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:3000/health')\""
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -1134,11 +1182,8 @@ jobs:
         uses: grafana/k6-action@v0.3.1
         with:
           filename: load-tests/load-test.js
-          flags: --env BASE_URL=http://localhost:5000
+          flags: --env BASE_URL=http://localhost:3000
 ```
-
----
-Here is **Part 3/4** of your execution plan. This covers **Part 4: Secrets Management**, **Part 5: Policy as Code with OPA**, and the **Deployment stage to AWS EC2**.
 
 ---
 
@@ -1196,7 +1241,7 @@ Navigate to your GitHub repository → **Settings → Secrets and variables → 
 Add these secrets:
 
 | Secret Name | Value Example | Purpose |
-|-------------|---------------|---------|
+| ------------- | --------------- | --------- |
 | `SECRET_KEY` | `a-very-long-random-string-32-chars-min` | Flask session security |
 | `DATABASE_URL` | `sqlite:///data/app.db` | Database path |
 | `AWS_ACCESS_KEY_ID` | `AKIA...` | AWS credentials for deployment |
@@ -1261,7 +1306,7 @@ services:
     container_name: ostad-app
     restart: unless-stopped
     ports:
-      - "80:5000"
+      - "80:3000"
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - DATABASE_URL=${DATABASE_URL}
@@ -1269,7 +1314,7 @@ services:
     volumes:
       - app-data:/app/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1368,7 +1413,7 @@ Add a new job to `.github/workflows/ci-cd.yml`:
 ### Step 6.3: What This Policy Enforces
 
 | Rule | Severity | Explanation |
-| ------ | ---------- |------------- |
+| ------ | ---------- | ------------- |
 | No `latest` tag | Deny | Prevents non-reproducible builds; ensures traceability |
 | Must have `USER` | Deny | Prevents container running as root (privilege escalation risk) |
 | Must have `HEALTHCHECK` | Deny | Ensures runtime health monitoring |
@@ -1437,7 +1482,7 @@ mkdir -p ~/ostad-app
             docker run -d \
               --name ostad-app \
               --restart unless-stopped \
-              -p 80:5000 \
+              -p 80:3000 \
               -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
               -e DATABASE_URL="sqlite:///data/app.db" \
               -v ostad-data:/app/data \
@@ -1485,14 +1530,7 @@ For a cleaner approach, copy `docker-compose.yml` to EC2 and use it:
 ```
 
 ---
-Here is **Part 4/4** — the final installment. This covers the **complete, finalized CI/CD pipeline**, the **"One-Man Army" Edge bonus**, a **README template**, and the **submission checklist**.
 
----
-
-# Assignment-15 Execution Plan
-## Part 4/4: Final Pipeline, Bonus Edge & Submission
-
----
 
 ## 8. The Complete CI/CD Pipeline
 
@@ -1527,7 +1565,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Install dependencies
         run: |
@@ -1666,12 +1704,12 @@ jobs:
       app:
         image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
         ports:
-          - 5000:5000
+          - 3000:3000
         env:
           DATABASE_URL: sqlite:///data/app.db
           SECRET_KEY: test-secret-key-for-load-test-only
         options: >-
-          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""
+          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:3000/health')\""
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -1684,7 +1722,7 @@ jobs:
         uses: grafana/k6-action@v0.3.1
         with:
           filename: load-tests/load-test.js
-          flags: --env BASE_URL=http://localhost:5000
+          flags: --env BASE_URL=http://localhost:3000
 
   # ─────────────────────────────────────────
   # STAGE 7: Deploy to AWS EC2
@@ -1733,12 +1771,12 @@ jobs:
 
 > **Best Practice to make your submission stand out:** **Implement a "Canary / Blue-Green Deployment" simulation using Docker Compose labels and a rollback mechanism.**
 
-Since you cannot use CodeDeploy or Kubernetes, simulate a production-grade deployment strategy on a single EC2 instance using **Docker Compose with health-checked rolling updates**.
+Since we cannot use CodeDeploy or Kubernetes, simulate a production-grade deployment strategy on a single EC2 instance using **Docker Compose with health-checked rolling updates**.
 
 ### What This Adds
 
 | Feature | Why It Impresses |
-|---------|------------------|
+| --------- | ------------------ |
 | Zero-downtime deployment | Blue container stays up until green passes health check |
 | Automatic rollback | If green fails health check, traffic stays on blue |
 | Container labeling | `ostad-app-blue` / `ostad-app-green` for clear identification |
@@ -1747,6 +1785,7 @@ Since you cannot use CodeDeploy or Kubernetes, simulate a production-grade deplo
 ### Implementation
 
 **`docker-compose.canary.yml`** (Optional advanced file)
+
 ```yaml
 version: '3.8'
 
@@ -1756,14 +1795,14 @@ services:
     container_name: ostad-app-blue
     restart: unless-stopped
     ports:
-      - "5001:5000"
+      - "5001:3000"
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - DATABASE_URL=${DATABASE_URL}
     volumes:
       - app-data:/app/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -1773,14 +1812,14 @@ services:
     container_name: ostad-app-green
     restart: unless-stopped
     ports:
-      - "5002:5000"
+      - "5002:3000"
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - DATABASE_URL=${DATABASE_URL}
     volumes:
       - app-data:/app/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -1800,12 +1839,13 @@ volumes:
 ```
 
 **`nginx.conf`** (Simple reverse proxy)
+
 ```nginx
 events { worker_connections 1024; }
 http {
     upstream backend {
-        server app-blue:5000;
-        # server app-green:5000;  # Switch comment to promote green
+        server app-blue:3000;
+        # server app-green:3000;  # Switch comment to promote green
     }
     server {
         listen 80;
@@ -1818,13 +1858,13 @@ http {
 }
 ```
 
-**Why this stands out:** Most submissions will show a basic `docker run` deployment. You will demonstrate **deployment strategy knowledge** (canary/blue-green) even within the constraints of a single EC2 instance. This signals senior-level thinking.
-
 ---
 
 ## 11. Final Submission Checklist
 
 Before submitting, verify every box:
+
+github url: [Github Repo](https://github.com/anisul-islam-prog/assignment-15)
 
 ### Code & Config
 
@@ -1832,40 +1872,44 @@ Before submitting, verify every box:
 ![alt text](image.png)
 - [x] `app/config.py` — no hardcoded secrets, `ValueError` guard on `SECRET_KEY`
 ![alt text](image-3.png)
-- [ ] `Dockerfile` — non-root user, healthcheck, no `latest` tag, patched base image
-- [ ] `docker-compose.yml` — secrets via env vars, volume for data persistence
-- [ ] `policies/docker.rego` — 3 deny rules, 1 warn rule
-- [ ] `load-tests/load-test.js` — 50–100 VUs, thresholds defined
-- [ ] `.github/workflows/ci-cd.yml` — complete pipeline with all 7 stages
-- [ ] `terraform/` — EC2, S3, Security Group
-- [ ] `sonar-project.properties` — configured for SonarCloud
+- [x] `Dockerfile` — non-root user, healthcheck, no `latest` tag, patched base image
+- [x] `docker-compose.yml` — secrets via env vars, volume for data persistence
+- [x] `policies/docker.rego` — 3 deny rules, 1 warn rule
+- [x] `load-tests/load-test.js` — 50–100 VUs, thresholds defined
+- [x] `.github/workflows/ci-cd.yml` — complete pipeline with all 7 stages
+- [x] `terraform/` — EC2, S3, Security Group
+- [x] `sonar-project.properties` — configured for SonarCloud
 
-### Screenshots 
+### Screenshots
 
 - [x] pytest passing in Actions
 ![alt text](image-1.png)
 - [x] SonarCloud before (showing issues)
 ![alt text](image-2.png)
-- [ ] SonarCloud after (issues resolved)
-- [ ] Trivy FS scan report
-- [ ] Trivy image scan report
-- [ ] k6 results summary
-- [ ] Conftest passing
+- [x] SonarCloud after (issues resolved)
+![alt text](image-4.png)
+- [x] Trivy FS scan report
+![alt text](image-7.png)
+- [x] Trivy image scan report
+![alt text](image-8.png)
+- [x] k6 results summary
+- [x] Conftest passing
+![alt text](image-6.png)
 - [ ] App running on EC2 public IP
 - [ ] GitHub Secrets page (redacted)
 
 ### Documentation
 
-- [ ] `README.md` filled out with your details
-- [ ] All 5 parts explained with tools used
-- [ ] Key learnings section completed
+- [x] `README.md` filled out with your details
+- [x] All 5 parts explained with tools used
+- [x] Key learnings section completed
 - [ ] Bonus section included (canary deployment)
 
 ### GitHub Repository
 
-- [ ] Repo is **public** (required for SonarCloud free tier)
-- [ ] All files committed and pushed
-- [ ] At least one successful full pipeline run on `main` branch
+- [x] Repo is **public** (required for SonarCloud free tier)
+- [x] All files committed and pushed
+- [x] At least one successful full pipeline run on `main` branch
 
 ---
 
@@ -1880,10 +1924,10 @@ terraform apply -var="key_pair_name=your-key"
 
 # Local testing
 pytest tests/ -v --cov=app
-k6 run --env BASE_URL=http://localhost:5000 load-tests/load-test.js
+k6 run --env BASE_URL=http://localhost:3000 load-tests/load-test.js
 conftest test Dockerfile --policy policies/docker.rego
 
 # Docker
 docker build -t ostad-app .
-docker run -d -p 5000:5000 -e SECRET_KEY=test ostad-app
+docker run -d -p 3000:3000 -e SECRET_KEY=test ostad-app
 ```
