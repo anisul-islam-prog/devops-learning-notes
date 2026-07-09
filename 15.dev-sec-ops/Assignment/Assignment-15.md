@@ -1893,10 +1893,14 @@ github url: [Github Repo](https://github.com/anisul-islam-prog/assignment-15)
 - [x] Trivy image scan report
 ![alt text](image-8.png)
 - [x] k6 results summary
+![alt text](image-9.png)
 - [x] Conftest passing
 ![alt text](image-6.png)
-- [ ] App running on EC2 public IP
-- [ ] GitHub Secrets page (redacted)
+- [x] App running on EC2 public IP
+![alt text](image-10.png)
+![alt text](image-11.png)
+- [x] GitHub Secrets page (redacted)
+![alt text](image-12.png)
 
 ### Documentation
 
