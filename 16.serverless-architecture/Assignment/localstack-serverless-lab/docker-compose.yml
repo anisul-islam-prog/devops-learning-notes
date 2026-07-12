@@ -1,0 +1,30 @@
+services:
+  localstack:
+    container_name: localstack-serverless-lab
+    image: localstack/localstack:4.0  # <-- Pin to Community Edition
+    ports:
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:4510-4559:4510-4559"
+    environment:
+      - DEBUG=1
+      - LAMBDA_EXECUTOR=docker
+      - LAMBDA_REMOTE_DOCKER=false
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - SERVICES=lambda,s3,iam,logs
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - PERSISTENCE=1
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./lambda:/lambda
+    networks:
+      - localstack-net
+
+volumes:
+  localstack-data:
+
+networks:
+  localstack-net:
+    driver: bridge

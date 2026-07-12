@@ -1531,7 +1531,6 @@ For a cleaner approach, copy `docker-compose.yml` to EC2 and use it:
 
 ---
 
-
 ## 8. The Complete CI/CD Pipeline
 
 Here is the fully assembled `.github/workflows/ci-cd.yml`. Every stage gates the next — this is **fail-fast** design.
