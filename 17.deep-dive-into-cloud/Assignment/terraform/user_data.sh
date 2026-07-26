@@ -8,7 +8,7 @@ echo "=== [$(date)] Starting bootstrap ==="
 # 1. SYSTEM UPDATE & DEPENDENCIES
 # -------------------------------------------------
 dnf update -y
-dnf install -y git curl wget jq
+dnf install -y git wget jq   # <-- REMOVED 'curl' — already installed as curl-minimal
 
 # -------------------------------------------------
 # 2. INSTALL NODE.JS 22 (via NodeSource)
@@ -39,16 +39,23 @@ cd Module-3-deployment
 npm install
 
 # -------------------------------------------------
-# 5. START APPLICATION WITH PM2
+# 5. START APPLICATION WITH PM2 (as root)
 # -------------------------------------------------
+export PM2_HOME="/root/.pm2"
 pm2 start ./src/server.js --name node-app
 pm2 startup systemd --service-name pm2-node-app
 pm2 save
+
+# Allow ec2-user to read PM2 logs
+chmod 755 /root/.pm2/logs
 
 # -------------------------------------------------
 # 6. CUSTOM HEALTH CHECK ENDPOINT (for ALB)
 # -------------------------------------------------
 # The app already has / and /api routes. PM2 ensures auto-restart.
+
+# Ensure cron directory exists
+mkdir -p /etc/cron.d
 
 # -------------------------------------------------
 # 7. SELF-HEALING: CRON JOB TO ENSURE APP IS RUNNING

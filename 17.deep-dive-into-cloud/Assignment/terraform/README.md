@@ -26,6 +26,8 @@
 - S3 lifecycle: Standard → IA → Glacier
 - Estimated monthly cost: **~$29**
 
+![alt text](image.png)
+
 ## Backup Strategy
 
 - Daily EBS snapshots via local cron script (7-day retention)

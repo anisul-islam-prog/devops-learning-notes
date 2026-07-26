@@ -6,7 +6,7 @@ resource "aws_autoscaling_group" "app" {
   health_check_grace_period = 300
 
   min_size         = 1
-  max_size         = 2
+  max_size         = 1
   desired_capacity = 1
 
   launch_template {

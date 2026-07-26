@@ -713,7 +713,7 @@ echo "=== [$(date)] Starting bootstrap ==="
 # 1. SYSTEM UPDATE & DEPENDENCIES
 # -------------------------------------------------
 dnf update -y
-dnf install -y git curl wget jq
+dnf install -y git wget jq   # <-- REMOVED 'curl' — already installed as curl-minimal
 
 # -------------------------------------------------
 # 2. INSTALL NODE.JS 22 (via NodeSource)
@@ -1184,7 +1184,7 @@ aws s3 cp /tmp/app-backup-*.tar.gz s3://$(terraform output -raw s3_bucket_name)/
 ### 9.2 Detailed Cost Breakdown (Monthly, us-east-1)
 
 | Service | Configuration | Monthly Cost |
-|---------|--------------|--------------|
+| --------- | -------------- | -------------- |
 | EC2 (t3.micro) | 1 instance, 730 hrs | ~$8.50 |
 | EBS (gp3, 8GB) | 1 volume | ~$0.64 |
 | ALB | 1 ALB + 1 LCU | ~$16.00 |
@@ -1199,7 +1199,7 @@ aws s3 cp /tmp/app-backup-*.tar.gz s3://$(terraform output -raw s3_bucket_name)/
 ### 9.3 Additional Cost Optimization Measures Implemented
 
 **1. S3 Intelligent Tiering & Lifecycle**
-Already in your `s3.tf`:
+Already in `s3.tf`:
 
 ```hcl
 # Non-current versions move to cheaper storage classes
@@ -1264,11 +1264,10 @@ aws ce get-cost-and-usage \
   --group-by Type=DIMENSION,Key=SERVICE
 ```
 
-**Fallback:** Use the **AWS Cost Explorer console** (usually accessible even with limited IAM) and take a screenshot for your submission.
+**Fallback:** Use the **AWS Cost Explorer console**
 
 ---
 
-## Bonus: The "One-Man Army" Edge
 
 ### 🏆 Best Practice to Add: **GitOps-Driven Immutable Infrastructure with Automated Instance Refresh**
 
@@ -1361,18 +1360,25 @@ Go to your fork → Settings → Secrets and variables → Actions:
 - `LAUNCH_TEMPLATE_ID` (from `terraform output`)
 - `ASG_NAME` (from `terraform output`)
 
-
 ## Final Submission Checklist
 
-Before you submit, verify:
-
-- [ ] `terraform apply` succeeds without errors
-- [ ] `http://<ALB_DNS>/` returns the Hello World page
-- [ ] `http://<ALB_DNS>/api` returns JSON
-- [ ] ASG shows 1 healthy instance in 2 AZs
-- [ ] S3 bucket has versioning enabled (check in console)
-- [ ] EBS snapshot exists (check EC2 → Snapshots)
-- [ ] Security Groups are restrictive (only your IP for SSH, only ALB for app)
-- [ ] IMDSv2 is enforced (check Launch Template metadata options)
-- [ ] Cost estimate is documented in README
+- [x] `terraform apply` succeeds without errors
+![alt text](image.png)
+- [x] `http://<ALB_DNS>/` returns the Hello World page
+- [x] `http://<ALB_DNS>/api` returns JSON
+![alt text](image-1.png)
+- [x] ASG shows 1 healthy instance in 2 AZs
+![alt text](image-2.png)
+- [x] S3 bucket has versioning enabled
+![alt text](image-5.png)
+![alt text](image-8.png)
+![alt text](image-9.png)
+- [x] EBS snapshot exists (check EC2 → Snapshots)
+![alt text](image-3.png)
+![alt text](image-4.png)
+- [x] Security Groups are restrictive (only your IP for SSH, only ALB for app)
+![alt text](image-6.png)
+![alt text](image-7.png)
+- [x] Cost estimate is documented in README [Here.](./terraform/README.md#cost-optimization)
+![alt text](./terraform/image.png)
 - [ ] **Bonus:** GitHub Actions workflow file exists and triggers on push

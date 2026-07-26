@@ -40,5 +40,5 @@ variable "app_repo_url" {
 variable "app_port" {
   description = "Application port"
   type        = number
-  default     = 3000
+  default     = 5000
 }
