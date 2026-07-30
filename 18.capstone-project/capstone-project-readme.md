@@ -1815,12 +1815,12 @@ You need visual evidence. Capture these:
 | --- | ----------- | ---------------------- |
 | 1 | **Kubernetes Dashboard / Lens** | ![alt text](image.png)|
 | 2 | **HPA Scaling in Action** | ![alt text](image-1.png)|
-| 3 | **SonarQube Analysis** | `http://localhost:9000` → Projects → urlshortener-capstone → Screenshot Quality Gate (Green PASS) |
-| 4 | **Grafana Dashboard** |![alt text](image-2.png) |
+| 3 | **SonarQube Analysis** | ![alt text](image-8.png)|
+| 4 | **Grafana Dashboard** | ![alt text](image-2.png) |
 | 5 | **Pod Status & Metrics** | ![alt text](image-3.png) ![alt text](image-4.png) |
 | 6 | **Ingress Working** | ![alt text](image-5.png)|
 | 7 | **NetworkPolicy Applied** | ![alt text](image-6.png) |
-| 8 | **GitHub Actions Pipeline** | Repo → Actions tab → Screenshot successful workflow run |
+| 8 | **GitHub Actions Pipeline** | ![alt text](image-9.png)|
 
 ---
 
@@ -1831,8 +1831,8 @@ You need visual evidence. Capture these:
 - [x] HPA shows metrics (not `<unknown>`)
 - [x] k6 test completed with report
 - [x] Grafana dashboard shows pod metrics
-- [ ] SonarQube Quality Gate is **PASSED** (green)
-- [ ] GitHub Actions workflow shows green checkmark
+- [x] SonarQube Quality Gate is **PASSED** (green)
+- [x] GitHub Actions workflow shows green checkmark
 - [x] NetworkPolicy exists in namespace
 - [x] [DEPLOYMENT.md](https://github.com/anisul-islam-prog/urlshortner-ms-devops-capstone/blob/main/DEPLOYMENT.md) is complete
 - [x] Architecture diagram exported as PDF/PNG
