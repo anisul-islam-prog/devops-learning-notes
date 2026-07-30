@@ -175,9 +175,9 @@ Students will be evaluated based on:
 
 ## Submission Guidelines
 
-- All source code must be uploaded to GitHub
+- All source code must be uploaded to GitHub [🐙 GitHub](https://github.com/anisul-islam-prog/urlshortner-ms-devops-capstone)
 - Repository must be clean and well-documented
-- Include README with deployment instructions
+- Include README with deployment instructions [📚 Deployment.md](https://github.com/anisul-islam-prog/urlshortner-ms-devops-capstone/blob/main/DEPLOYMENT.md)
 - Provide architecture diagram in PDF or image format
 - Ensure all configurations are reproducible
 
@@ -187,7 +187,7 @@ Students will be evaluated based on:
 
 **Project:** URL Shortener Microservices on Minikube  
 **Standard:** 2026 Industry Best Practices  
-**Platform:** Minikube (Local) + GitHub Actions (CI/CD) + DockerHub + Helm
+**Platform:** Minikube (Local) + GitHub Actions (CI/CD) + Docker + Helm
 
 ---
 
@@ -200,54 +200,54 @@ A **production-hardened, single-node Kubernetes cluster** (Minikube) running fou
 ### Architecture Diagram (Textual Representation)
 
 ```plain
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              EXTERNAL TRAFFIC                               │
-│                         (Simulated via Ingress/NIP)                         │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                              ┌────────▼────────┐
-                              │  NGINX Ingress  │
-                              │   Controller    │
-                              │  (LoadBalancer) │
-                              └────────┬────────┘
-                                       │
-                    ┌──────────────────┼──────────────────┐
-                    │                  │                  │
-            ┌───────▼──────┐  ┌───────▼──────┐  ┌───────▼──────┐
-            │  Python SVC  │  │   Go SVC     │  │  Node.js SVC │
-            │   (Port 80)  │  │  (Port 80)   │  │   (Port 80)  │
-            │  Dashboard   │  │  Redirects   │  │   Metadata   │
-            │   /create    │  │   /{code}    │  │   Enrichment │
-            └───────┬──────┘  └───────┬──────┘  └───────┬──────┘
-                    │                 │                 │
-                    └─────────────────┼─────────────────┘
-                                      │
-                              ┌───────▼────────┐
-                              │  Redis Cluster │
-                              │ Pub/Sub + Cache│
-                              │   (ClusterIP)  │
-                              └────────────────┘
+                ┌─────────────────────────────────────────────────────────────────────────────┐
+                │                              EXTERNAL TRAFFIC                               │
+                │                         (Simulated via Ingress/NIP)                         │
+                └─────────────────────────────────────────────────────────────────────────────┘
+                                                     │
+                                            ┌────────▼────────┐
+                                            │  NGINX Ingress  │
+                                            │   Controller    │
+                                            │  (LoadBalancer) │
+                                            └────────┬────────┘
+                                                     │
+                                    ┌────────────────┼──────────────────┐
+                                    │                │                  │
+                            ┌───────▼──────┐  ┌───────▼──────┐  ┌───────▼──────┐
+                            │  Python SVC  │  │   Go SVC     │  │  Node.js SVC │
+                            │   (Port 80)  │  │  (Port 80)   │  │   (Port 80)  │
+                            │  Dashboard   │  │  Redirects   │  │   Metadata   │
+                            │   /create    │  │   /{code}    │  │   Enrichment │
+                            └───────┬──────┘  └───────┬──────┘  └───────┬──────┘
+                                    │                 │                 │
+                                    └─────────────────┼─────────────────┘
+                                                      │
+                                              ┌───────▼────────┐
+                                              │  Redis Cluster │
+                                              │ Pub/Sub + Cache│
+                                              │   (ClusterIP)  │
+                                              └────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         MONITORING & OBSERVABILITY                          │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │ Prometheus   │◄───│ Metrics      │◄───│  HPA         │                   │
-│  │ (TSDB)       │    │ Server       │    │  Controller  │                   │
-│  └──────┬───────┘    └──────────────┘    └──────────────┘                   │
-│         │                                                                   │
-│  ┌──────▼───────┐                                                           │
-│  │   Grafana    │◄──── ServiceMonitor / PodMonitor                          │
-│  │ (Dashboards) │                                                           │
-│  └──────────────┘                                                           │
-└─────────────────────────────────────────────────────────────────────────────┘
+                ┌─────────────────────────────────────────────────────────────────────────────┐
+                │                         MONITORING & OBSERVABILITY                          │
+                │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+                │  │ Prometheus   │◄───│ Metrics      │◄───│  HPA         │                   │
+                │  │ (TSDB)       │    │ Server       │    │  Controller  │                   │
+                │  └──────┬───────┘    └──────────────┘    └──────────────┘                   │
+                │         │                                                                   │
+                │  ┌──────▼───────┐                                                           │
+                │  │   Grafana    │◄──── ServiceMonitor / PodMonitor                          │
+                │  │ (Dashboards) │                                                           │
+                │  └──────────────┘                                                           │
+                └─────────────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              CI/CD PIPELINE                                 │
-│  GitHub Actions ──► SonarQube ──► Trivy Scan ──► DockerHub ──► Helm Upgrade │
-│       │                                                              │      │
-│       └──────────────────── Self-Hosted Runner ──────────────────────┘      │
-│                     (Runs on Minikube host for kubectl access)              │
-└─────────────────────────────────────────────────────────────────────────────┘
+                ┌─────────────────────────────────────────────────────────────────────────────┐
+                │                              CI/CD PIPELINE                                 │
+                │  GitHub Actions ──► SonarQube ──► Trivy Scan ──► DockerHub ──► Helm Upgrade │
+                │       │                                                              │      │
+                │       └──────────────────── Self-Hosted Runner ──────────────────────┘      │
+                │                     (Runs on Minikube host for kubectl access)              │
+                └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Architecture Diagram (Visual Representation)
@@ -340,7 +340,7 @@ minikube start \
   --cpus=3 \
   --memory=8g \
   --disk-size=20g \
-  --kubernetes-version=v1.30.0 \
+  --kubernetes-version=v1.35.1 \
   --addons=metrics-server,ingress,ingress-dns \
   --extra-config=kubelet.housekeeping-interval=10s
 
@@ -1834,6 +1834,6 @@ You need visual evidence. Capture these:
 - [ ] SonarQube Quality Gate is **PASSED** (green)
 - [ ] GitHub Actions workflow shows green checkmark
 - [x] NetworkPolicy exists in namespace
-- [x] README.md is complete
+- [x] [DEPLOYMENT.md](https://github.com/anisul-islam-prog/urlshortner-ms-devops-capstone/blob/main/DEPLOYMENT.md) is complete
 - [x] Architecture diagram exported as PDF/PNG
 - [x] All code pushed to `https://github.com/anisul-islam-prog/urlshortner-ms-devops-capstone`
